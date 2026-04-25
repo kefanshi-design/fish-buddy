@@ -114,102 +114,104 @@
 </div>
 
 <script>
-const character = document.getElementById('character');
-const scene     = document.getElementById('scene');
-const hint      = document.getElementById('hint');
-
-const melody = [523.25, 659.25, 783.99, 880.00, 1046.50,
-                880.00, 783.99, 659.25, 698.46, 880.00,
-                1046.50, 880.00, 659.25, 523.25, 659.25, 783.99];
-const noteEmojis = ['♩','♪','♫','♬','🎵','🎶'];
+const character  = document.getElementById('character');
+const scene      = document.getElementById('scene');
+const hint       = document.getElementById('hint');
 const isMobile   = ('ontouchstart' in window) || (navigator.maxTouchPoints > 0);
 
-let audioCtx      = null;
-let audioUnlocked = false;
-let isHovering    = false;
-let noteIndex     = 0;
-let noteTimer     = null;
+const melody = [523.25,659.25,783.99,880.00,1046.50,
+                880.00,783.99,659.25,698.46,880.00,
+                1046.50,880.00,659.25,523.25,659.25,783.99];
+const noteEmojis = ['♩','♪','♫','♬','🎵','🎶'];
 
-// ── Sound button (persistent, works in Instagram/Linktree WebView) ──
-// Instagram in-app browser is a restricted WebView — Web Audio needs
-// a "click" event (not touchstart) to unlock properly in there.
-// We show a visible button the user taps; it stays so they can retry.
+let audioCtx  = null;
+let isHovering = false;
+let noteIndex  = 0;
+let noteTimer  = null;
+
+// ── Core audio ────────────────────────────────────────────────
+// audioCtx is null until the button is tapped.
+// playNote simply checks if audioCtx exists — no async flag needed.
+function playNote(freq) {
+  if (!audioCtx) return;
+  try {
+    const osc  = audioCtx.createOscillator();
+    const gain = audioCtx.createGain();
+    osc.connect(gain);
+    gain.connect(audioCtx.destination);
+    osc.type = 'sine';
+    osc.frequency.setValueAtTime(freq, audioCtx.currentTime);
+    gain.gain.setValueAtTime(0,    audioCtx.currentTime);
+    gain.gain.linearRampToValueAtTime(0.15, audioCtx.currentTime + 0.015);
+    gain.gain.exponentialRampToValueAtTime(0.001, audioCtx.currentTime + 0.20);
+    osc.start(audioCtx.currentTime);
+    osc.stop(audioCtx.currentTime + 0.22);
+  } catch(e) {}
+}
+
+// ── Sound unlock button ───────────────────────────────────────
+// Must use "click" event — the only gesture ALL WebViews trust
+// (Instagram, Linktree, Safari, Chrome on iOS/Android).
+// audioCtx is created synchronously inside the click handler.
 const soundBtn = document.createElement('button');
-soundBtn.id = 'soundBtn';
 soundBtn.textContent = '🔇 tap to enable sound';
 soundBtn.style.cssText = `
   position: fixed;
-  bottom: ${isMobile ? '40px' : '24px'};
-  left: 50%;
-  transform: translateX(-50%);
-  background: rgba(255,255,255,0.85);
-  border: 2px solid rgba(200,80,100,0.4);
+  bottom: ${isMobile ? '48px' : '24px'};
+  left: 50%; transform: translateX(-50%);
+  background: rgba(255,255,255,0.92);
+  border: 2px solid rgba(200,80,100,0.45);
   border-radius: 999px;
-  padding: ${isMobile ? '18px 36px' : '10px 22px'};
-  font-size: ${isMobile ? '28px' : '14px'};
+  padding: ${isMobile ? '20px 40px' : '10px 24px'};
+  font-size: ${isMobile ? '30px' : '15px'};
   font-family: Georgia, serif;
-  color: rgba(160,60,80,0.9);
-  cursor: pointer;
-  z-index: 999;
+  color: rgba(150,50,70,0.9);
+  cursor: pointer; z-index: 999;
   box-shadow: 0 4px 20px rgba(0,0,0,0.1);
-  transition: background 0.2s, transform 0.1s;
   white-space: nowrap;
+  transition: background 0.2s;
 `;
 document.body.appendChild(soundBtn);
 
-function unlockAudio() {
-  // Create AudioContext fresh inside this click handler
-  try {
-    if (!audioCtx) {
-      audioCtx = new (window.AudioContext || window.webkitAudioContext)();
-    }
-    // Play silent buffer — the universal WebView unlock trick
-    const buf = audioCtx.createBuffer(1, 1, 22050);
-    const src = audioCtx.createBufferSource();
-    src.buffer = buf;
-    src.connect(audioCtx.destination);
-    src.start(0);
-    audioCtx.resume().then(() => {
-      audioUnlocked = true;
-      soundBtn.textContent = '🔊 sound on!';
-      soundBtn.style.background = 'rgba(255,240,240,0.9)';
-      soundBtn.style.borderColor = 'rgba(200,80,100,0.7)';
-      // Hide button after 2s once confirmed working
-      setTimeout(() => {
-        soundBtn.style.transition = 'opacity 0.6s';
-        soundBtn.style.opacity = '0';
-        setTimeout(() => soundBtn.remove(), 700);
-      }, 1500);
-    });
-  } catch(e) {
-    soundBtn.textContent = '⚠️ audio blocked by browser';
+soundBtn.addEventListener('click', function() {
+  // 1. Create AudioContext SYNCHRONOUSLY inside the click handler
+  if (!audioCtx) {
+    audioCtx = new (window.AudioContext || window.webkitAudioContext)();
   }
-}
 
-// Use CLICK (not touchstart) — most reliable across all WebViews
-// including Instagram, Linktree, LINE, WeChat in-app browsers
-soundBtn.addEventListener('click', unlockAudio);
+  // 2. Resume synchronously (iOS Safari needs this)
+  audioCtx.resume();
 
-// ── Audio ─────────────────────────────────────────────────────
-function playNote(freq) {
-  if (!audioCtx || !audioUnlocked) return;
-  if (audioCtx.state === 'suspended') audioCtx.resume();
-  const osc  = audioCtx.createOscillator();
-  const gain = audioCtx.createGain();
-  osc.connect(gain);
-  gain.connect(audioCtx.destination);
-  osc.type = 'sine';
-  osc.frequency.setValueAtTime(freq, audioCtx.currentTime);
-  gain.gain.setValueAtTime(0, audioCtx.currentTime);
-  gain.gain.linearRampToValueAtTime(0.15, audioCtx.currentTime + 0.015);
-  gain.gain.exponentialRampToValueAtTime(0.001, audioCtx.currentTime + 0.2);
-  osc.start(audioCtx.currentTime);
-  osc.stop(audioCtx.currentTime + 0.22);
-}
+  // 3. Play a silent buffer to fully unlock the engine
+  const buf = audioCtx.createBuffer(1, 1, 22050);
+  const src = audioCtx.createBufferSource();
+  src.buffer = buf;
+  src.connect(audioCtx.destination);
+  src.start(0);
+
+  // 4. Play an AUDIBLE confirmation beep — proves it worked!
+  //    Uses a tiny setTimeout so the silent buffer clears first
+  setTimeout(() => {
+    playNote(880.00);
+    setTimeout(() => playNote(1046.50), 160);
+  }, 30);
+
+  // 5. Update button immediately (no async wait)
+  soundBtn.textContent = '🔊 sound enabled!';
+  soundBtn.style.background = 'rgba(255,235,235,0.95)';
+  soundBtn.style.borderColor = 'rgba(200,80,100,0.8)';
+  soundBtn.disabled = true;
+
+  setTimeout(() => {
+    soundBtn.style.transition = 'opacity 0.7s';
+    soundBtn.style.opacity = '0';
+    setTimeout(() => soundBtn.remove(), 800);
+  }, 1800);
+});
 
 // ── Notes ─────────────────────────────────────────────────────
 function spawnNote() {
-  const el   = document.createElement('div');
+  const el  = document.createElement('div');
   el.className = 'note';
   el.textContent = noteEmojis[Math.floor(Math.random() * noteEmojis.length)];
   const rect   = scene.getBoundingClientRect();
@@ -252,7 +254,7 @@ function stopHover() {
 character.addEventListener('mouseenter', startHover);
 character.addEventListener('mouseleave', stopHover);
 
-// ── Mobile: hold = play, release = stop ───────────────────────
+// ── Mobile: hold = play, lift = stop ─────────────────────────
 character.addEventListener('touchstart', (e) => {
   e.preventDefault();
   startHover();
@@ -263,7 +265,6 @@ character.addEventListener('touchend', (e) => {
   stopHover();
 }, { passive: false });
 
-// ── Hint text ─────────────────────────────────────────────────
 hint.textContent = isMobile ? 'hold me ✦' : 'Click and Hover ✦';
 </script>
 </body>
