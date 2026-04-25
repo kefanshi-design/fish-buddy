@@ -84,6 +84,24 @@
     pointer-events: none;
     transition: opacity 0.5s ease;
   }
+
+  /* ── Mobile: scale everything 3× ── */
+  @media (max-width: 768px), (pointer: coarse) {
+    .scene {
+      width: 100vw;
+      height: 100vh;
+    }
+    .character-wrap img {
+      width: 90vw;
+      height: 90vw;
+      max-width: 480px;
+      max-height: 480px;
+    }
+    .hint {
+      font-size: 28px;
+      bottom: 12vh;
+    }
+  }
 </style>
 </head>
 <body>
@@ -105,20 +123,21 @@ const melody = [523.25, 659.25, 783.99, 880.00, 1046.50,
                 1046.50, 880.00, 659.25, 523.25, 659.25, 783.99];
 
 const noteEmojis = ['♩','♪','♫','♬','🎵','🎶'];
-let audioCtx   = null;
-let isHovering = false;
-let noteIndex  = 0;
-let noteTimer  = null;
-
-// ── Audio unlock (critical for iOS Safari) ──────────────────
-// iOS requires AudioContext to be created AND resumed
-// synchronously inside a user gesture handler.
+let audioCtx      = null;
 let audioUnlocked = false;
+let isHovering    = false;
+let noteIndex     = 0;
+let noteTimer     = null;
+const isMobile    = ('ontouchstart' in window) || (navigator.maxTouchPoints > 0);
 
+// ── Audio unlock ─────────────────────────────────────────────
+// Must happen synchronously inside a real user gesture.
+// We attach to the WHOLE document so the very first tap/click
+// anywhere on the page unlocks audio — fixing "first hover silent".
 function unlockAudio() {
   if (audioUnlocked) return;
   if (!audioCtx) audioCtx = new (window.AudioContext || window.webkitAudioContext)();
-  // Play a silent buffer to fully unlock the audio engine on iOS
+  // Play a silent 1-frame buffer — the iOS unlock trick
   const buf = audioCtx.createBuffer(1, 1, 22050);
   const src = audioCtx.createBufferSource();
   src.buffer = buf;
@@ -126,6 +145,11 @@ function unlockAudio() {
   src.start(0);
   audioCtx.resume().then(() => { audioUnlocked = true; });
 }
+
+// Unlock on very first interaction anywhere on the page
+['mousedown','touchstart','keydown'].forEach(evt => {
+  document.addEventListener(evt, unlockAudio, { once: true, passive: true });
+});
 
 function getCtx() {
   if (!audioCtx) audioCtx = new (window.AudioContext || window.webkitAudioContext)();
@@ -152,12 +176,14 @@ function spawnNote() {
   const el = document.createElement('div');
   el.className = 'note';
   el.textContent = noteEmojis[Math.floor(Math.random() * noteEmojis.length)];
+  const sceneRect = scene.getBoundingClientRect();
+  const cx = sceneRect.width  / 2;
+  const cy = sceneRect.height / 2;
   const angle  = Math.random() * Math.PI * 2;
-  const radius = 55 + Math.random() * 50;
-  const cx = 180, cy = 170;
+  const radius = (isMobile ? 120 : 55) + Math.random() * (isMobile ? 80 : 50);
   el.style.left     = (cx + Math.cos(angle) * radius - 14) + 'px';
   el.style.top      = (cy + Math.sin(angle) * radius - 14) + 'px';
-  el.style.fontSize = (16 + Math.random() * 14) + 'px';
+  el.style.fontSize = (isMobile ? 36 : 16) + Math.random() * (isMobile ? 20 : 14) + 'px';
   const hue = 340 + Math.random() * 30;
   el.style.color = `hsl(${hue}, 75%, 45%)`;
   scene.appendChild(el);
@@ -187,26 +213,25 @@ function stopHover() {
   clearTimeout(noteTimer);
 }
 
-// Mouse (desktop)
+// ── Desktop: mouse ───────────────────────────────────────────
 character.addEventListener('mouseenter', startHover);
 character.addEventListener('mouseleave', stopHover);
 
-// Touch (mobile) — unlock audio first, then start
+// ── Mobile: touch ────────────────────────────────────────────
+// touchstart unlocks audio AND starts hover in one gesture
 character.addEventListener('touchstart', (e) => {
   e.preventDefault();
-  unlockAudio();   // must happen synchronously inside touch handler
+  unlockAudio();
   startHover();
-}, {passive: false});
+}, { passive: false });
 
 character.addEventListener('touchend', (e) => {
   e.preventDefault();
   stopHover();
-}, {passive: false});
+}, { passive: false });
 
-// Also update hint text for mobile users
-if ('ontouchstart' in window) {
-  document.getElementById('hint').textContent = 'tap me ✦';
-}
+// Hint text
+hint.textContent = isMobile ? 'tap me ✦' : 'hover over me ✦';
 </script>
 </body>
 </html>
