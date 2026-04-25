@@ -121,8 +121,8 @@ const hint      = document.getElementById('hint');
 const melody = [523.25, 659.25, 783.99, 880.00, 1046.50,
                 880.00, 783.99, 659.25, 698.46, 880.00,
                 1046.50, 880.00, 659.25, 523.25, 659.25, 783.99];
-const noteEmojis  = ['♩','♪','♫','♬','🎵','🎶'];
-const isMobile    = ('ontouchstart' in window) || (navigator.maxTouchPoints > 0);
+const noteEmojis = ['♩','♪','♫','♬','🎵','🎶'];
+const isMobile   = ('ontouchstart' in window) || (navigator.maxTouchPoints > 0);
 
 let audioCtx      = null;
 let audioUnlocked = false;
@@ -130,59 +130,67 @@ let isHovering    = false;
 let noteIndex     = 0;
 let noteTimer     = null;
 
-// ── Intro overlay ────────────────────────────────────────────
-// Browser rule: audio ONLY works after a click/tap.
-// mouseenter/hover is NOT a valid gesture — no way around this.
-// Solution: show a one-time overlay, user taps it → audio unlocked
-// → overlay disappears → now hover/touch on character plays sound.
-const overlay = document.createElement('div');
-overlay.id = 'overlay';
-overlay.innerHTML = isMobile
-  ? '<div class="overlay-box">tap anywhere<br>to start 🎵</div>'
-  : '<div class="overlay-box">click anywhere<br>to start 🎵</div>';
-overlay.style.cssText = `
-  position: fixed; inset: 0;
-  background: rgba(255,222,222,0.82);
-  backdrop-filter: blur(4px);
-  display: flex; align-items: center; justify-content: center;
-  z-index: 999; cursor: pointer;
+// ── Sound button (persistent, works in Instagram/Linktree WebView) ──
+// Instagram in-app browser is a restricted WebView — Web Audio needs
+// a "click" event (not touchstart) to unlock properly in there.
+// We show a visible button the user taps; it stays so they can retry.
+const soundBtn = document.createElement('button');
+soundBtn.id = 'soundBtn';
+soundBtn.textContent = '🔇 tap to enable sound';
+soundBtn.style.cssText = `
+  position: fixed;
+  bottom: ${isMobile ? '40px' : '24px'};
+  left: 50%;
+  transform: translateX(-50%);
+  background: rgba(255,255,255,0.85);
+  border: 2px solid rgba(200,80,100,0.4);
+  border-radius: 999px;
+  padding: ${isMobile ? '18px 36px' : '10px 22px'};
+  font-size: ${isMobile ? '28px' : '14px'};
   font-family: Georgia, serif;
+  color: rgba(160,60,80,0.9);
+  cursor: pointer;
+  z-index: 999;
+  box-shadow: 0 4px 20px rgba(0,0,0,0.1);
+  transition: background 0.2s, transform 0.1s;
+  white-space: nowrap;
 `;
-overlay.querySelector('.overlay-box').style.cssText = `
-  text-align: center;
-  font-size: ${isMobile ? '36px' : '20px'};
-  color: rgba(160,60,80,0.85);
-  line-height: 1.5;
-  animation: pulse 1.2s ease-in-out infinite alternate;
-`;
-document.body.appendChild(overlay);
+document.body.appendChild(soundBtn);
 
-// Inject pulse keyframe
-const ks = document.createElement('style');
-ks.textContent = '@keyframes pulse { from{opacity:0.6;transform:scale(0.97)} to{opacity:1;transform:scale(1.03)} }';
-document.head.appendChild(ks);
-
-function unlockAndDismiss() {
-  if (audioUnlocked) return;
-  // Create & unlock AudioContext synchronously inside this gesture
-  audioCtx = new (window.AudioContext || window.webkitAudioContext)();
-  const buf = audioCtx.createBuffer(1, 1, 22050);
-  const src = audioCtx.createBufferSource();
-  src.buffer = buf;
-  src.connect(audioCtx.destination);
-  src.start(0);
-  audioCtx.resume();
-  audioUnlocked = true;
-  // Fade out overlay
-  overlay.style.transition = 'opacity 0.4s';
-  overlay.style.opacity = '0';
-  setTimeout(() => overlay.remove(), 420);
+function unlockAudio() {
+  // Create AudioContext fresh inside this click handler
+  try {
+    if (!audioCtx) {
+      audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+    }
+    // Play silent buffer — the universal WebView unlock trick
+    const buf = audioCtx.createBuffer(1, 1, 22050);
+    const src = audioCtx.createBufferSource();
+    src.buffer = buf;
+    src.connect(audioCtx.destination);
+    src.start(0);
+    audioCtx.resume().then(() => {
+      audioUnlocked = true;
+      soundBtn.textContent = '🔊 sound on!';
+      soundBtn.style.background = 'rgba(255,240,240,0.9)';
+      soundBtn.style.borderColor = 'rgba(200,80,100,0.7)';
+      // Hide button after 2s once confirmed working
+      setTimeout(() => {
+        soundBtn.style.transition = 'opacity 0.6s';
+        soundBtn.style.opacity = '0';
+        setTimeout(() => soundBtn.remove(), 700);
+      }, 1500);
+    });
+  } catch(e) {
+    soundBtn.textContent = '⚠️ audio blocked by browser';
+  }
 }
 
-overlay.addEventListener('click',      unlockAndDismiss);
-overlay.addEventListener('touchstart', (e) => { e.preventDefault(); unlockAndDismiss(); }, { passive: false });
+// Use CLICK (not touchstart) — most reliable across all WebViews
+// including Instagram, Linktree, LINE, WeChat in-app browsers
+soundBtn.addEventListener('click', unlockAudio);
 
-// ── Audio ────────────────────────────────────────────────────
+// ── Audio ─────────────────────────────────────────────────────
 function playNote(freq) {
   if (!audioCtx || !audioUnlocked) return;
   if (audioCtx.state === 'suspended') audioCtx.resume();
@@ -201,7 +209,7 @@ function playNote(freq) {
 
 // ── Notes ─────────────────────────────────────────────────────
 function spawnNote() {
-  const el = document.createElement('div');
+  const el   = document.createElement('div');
   el.className = 'note';
   el.textContent = noteEmojis[Math.floor(Math.random() * noteEmojis.length)];
   const rect   = scene.getBoundingClientRect();
@@ -244,8 +252,7 @@ function stopHover() {
 character.addEventListener('mouseenter', startHover);
 character.addEventListener('mouseleave', stopHover);
 
-// ── Mobile ────────────────────────────────────────────────────
-// Hold finger = music plays. Lift finger = stops.
+// ── Mobile: hold = play, release = stop ───────────────────────
 character.addEventListener('touchstart', (e) => {
   e.preventDefault();
   startHover();
@@ -256,7 +263,8 @@ character.addEventListener('touchend', (e) => {
   stopHover();
 }, { passive: false });
 
-hint.textContent = isMobile ? 'hold me ✦' : 'hover over me ✦';
+// ── Hint text ─────────────────────────────────────────────────
+hint.textContent = isMobile ? 'hold me ✦' : 'Click and Hover ✦';
 </script>
 </body>
 </html>
