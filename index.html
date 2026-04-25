@@ -110,6 +110,23 @@ let isHovering = false;
 let noteIndex  = 0;
 let noteTimer  = null;
 
+// ── Audio unlock (critical for iOS Safari) ──────────────────
+// iOS requires AudioContext to be created AND resumed
+// synchronously inside a user gesture handler.
+let audioUnlocked = false;
+
+function unlockAudio() {
+  if (audioUnlocked) return;
+  if (!audioCtx) audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+  // Play a silent buffer to fully unlock the audio engine on iOS
+  const buf = audioCtx.createBuffer(1, 1, 22050);
+  const src = audioCtx.createBufferSource();
+  src.buffer = buf;
+  src.connect(audioCtx.destination);
+  src.start(0);
+  audioCtx.resume().then(() => { audioUnlocked = true; });
+}
+
 function getCtx() {
   if (!audioCtx) audioCtx = new (window.AudioContext || window.webkitAudioContext)();
   if (audioCtx.state === 'suspended') audioCtx.resume();
@@ -170,10 +187,26 @@ function stopHover() {
   clearTimeout(noteTimer);
 }
 
+// Mouse (desktop)
 character.addEventListener('mouseenter', startHover);
 character.addEventListener('mouseleave', stopHover);
-character.addEventListener('touchstart',  (e) => { e.preventDefault(); startHover(); }, {passive:false});
-character.addEventListener('touchend',    stopHover);
+
+// Touch (mobile) — unlock audio first, then start
+character.addEventListener('touchstart', (e) => {
+  e.preventDefault();
+  unlockAudio();   // must happen synchronously inside touch handler
+  startHover();
+}, {passive: false});
+
+character.addEventListener('touchend', (e) => {
+  e.preventDefault();
+  stopHover();
+}, {passive: false});
+
+// Also update hint text for mobile users
+if ('ontouchstart' in window) {
+  document.getElementById('hint').textContent = 'tap me ✦';
+}
 </script>
 </body>
 </html>
