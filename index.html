@@ -90,19 +90,19 @@
 
   #soundBtn {
     position: fixed;
-    bottom: max(40px, 5vh);
+    bottom: max(28px, 4vh);
     left: 50%;
     transform: translateX(-50%);
     background: rgba(255,255,255,0.93);
-    border: 2.5px solid rgba(200,80,100,0.5);
+    border: 2px solid rgba(200,80,100,0.45);
     border-radius: 999px;
-    padding: clamp(12px,3vw,20px) clamp(24px,6vw,44px);
-    font-size: clamp(16px,4.5vw,22px);
+    padding: clamp(8px,2vw,12px) clamp(16px,4vw,26px);
+    font-size: clamp(13px,3.2vw,16px);
     font-family: Georgia, serif;
     color: rgba(150,50,70,0.95);
     cursor: pointer;
     z-index: 9999;
-    box-shadow: 0 6px 24px rgba(0,0,0,0.12);
+    box-shadow: 0 4px 16px rgba(0,0,0,0.10);
     white-space: nowrap;
     -webkit-tap-highlight-color: rgba(255,160,180,0.3);
     transition: background 0.2s, opacity 0.6s;
@@ -188,6 +188,15 @@ soundBtn.addEventListener('touchend', (e) => {
   e.preventDefault();
   doUnlock();
 });
+
+// Desktop: unlock on first mousedown anywhere on the page.
+// This means hovering immediately after any click works —
+// user doesn't need to find the button first on desktop.
+if (!isMobile) {
+  document.addEventListener('mousedown', doUnlock, { once: true });
+  // Update button label for desktop context
+  soundBtn.textContent = '🔇 click anywhere to start';
+}
 
 // ── Notes visual ──────────────────────────────────────────────
 function spawnNote() {
