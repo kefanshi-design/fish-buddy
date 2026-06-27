@@ -19,7 +19,7 @@ A playful product concept that makes music and small joys.
 
 - Figma
 - Claude AI
-- HTML / CSS / JavaScript
+- HTML
 
 ## Live Demo
 
